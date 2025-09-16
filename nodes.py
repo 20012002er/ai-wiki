@@ -3,6 +3,7 @@ import re
 import yaml
 from pocketflow import Node, BatchNode
 from utils.crawl_github_files import crawl_github_files
+from utils.crawl_gitlab_files import crawl_gitlab_files
 from utils.call_llm import call_llm
 from utils.crawl_local_files import crawl_local_files
 
@@ -38,10 +39,33 @@ class FetchRepo(Node):
         exclude_patterns = shared["exclude_patterns"]
         max_file_size = shared["max_file_size"]
 
+        # Determine repository type
+        is_gitlab = False
+        gitlab_domain = "gitlab.com"
+        repo_type = shared.get("repo_type")
+        
+        if repo_url:
+            if repo_type:
+                # Use explicit repository type if provided
+                is_gitlab = (repo_type == "gitlab")
+            else:
+                # Auto-detect from URL (backward compatibility)
+                is_gitlab = "gitlab.com" in repo_url or "gitlab." in repo_url
+            
+            # Extract GitLab domain from URL for GitLab repositories
+            if is_gitlab:
+                from urllib.parse import urlparse
+                parsed_url = urlparse(repo_url)
+                if parsed_url.netloc and "gitlab" in parsed_url.netloc:
+                    gitlab_domain = parsed_url.netloc
+
         return {
             "repo_url": repo_url,
             "local_dir": local_dir,
             "token": shared.get("github_token"),
+            "gitlab_token": shared.get("gitlab_token"),
+            "is_gitlab": is_gitlab,
+            "gitlab_domain": gitlab_domain,
             "include_patterns": include_patterns,
             "exclude_patterns": exclude_patterns,
             "max_file_size": max_file_size,
@@ -51,14 +75,28 @@ class FetchRepo(Node):
     def exec(self, prep_res):
         if prep_res["repo_url"]:
             print(f"Crawling repository: {prep_res['repo_url']}...")
-            result = crawl_github_files(
-                repo_url=prep_res["repo_url"],
-                token=prep_res["token"],
-                include_patterns=prep_res["include_patterns"],
-                exclude_patterns=prep_res["exclude_patterns"],
-                max_file_size=prep_res["max_file_size"],
-                use_relative_paths=prep_res["use_relative_paths"],
-            )
+            
+            if prep_res["is_gitlab"]:
+                # Use GitLab crawler for GitLab repositories
+                result = crawl_gitlab_files(
+                    repo_url=prep_res["repo_url"],
+                    token=prep_res["gitlab_token"],
+                    gitlab_domain=prep_res["gitlab_domain"],
+                    include_patterns=prep_res["include_patterns"],
+                    exclude_patterns=prep_res["exclude_patterns"],
+                    max_file_size=prep_res["max_file_size"],
+                    use_relative_paths=prep_res["use_relative_paths"],
+                )
+            else:
+                # Use GitHub crawler for GitHub repositories
+                result = crawl_github_files(
+                    repo_url=prep_res["repo_url"],
+                    token=prep_res["token"],
+                    include_patterns=prep_res["include_patterns"],
+                    exclude_patterns=prep_res["exclude_patterns"],
+                    max_file_size=prep_res["max_file_size"],
+                    use_relative_paths=prep_res["use_relative_paths"],
+                )
         else:
             print(f"Crawling directory: {prep_res['local_dir']}...")
 

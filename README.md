@@ -5,7 +5,7 @@
 ## 功能特性
 
 - 🚀 RESTful API 接口
-- 📚 支持GitHub仓库和本地目录分析
+- 📚 支持GitHub仓库、GitLab仓库和本地目录分析
 - 🌍 多语言教程生成
 - ⚡ 异步任务处理
 - 📦 结果文件下载
@@ -55,11 +55,26 @@ python run_api.py
 ### 1. 生成教程
 **POST** `/generate-tutorial`
 
-请求体示例：
+请求体示例（GitHub）：
 ```json
 {
   "repo_url": "https://github.com/username/repo",
   "project_name": "my-project",
+  "github_token": "your_github_token",
+  "language": "chinese",
+  "output_dir": "output",
+  "max_file_size": 100000,
+  "use_cache": true,
+  "max_abstractions": 10
+}
+```
+
+请求体示例（GitLab）：
+```json
+{
+  "repo_url": "https://gitlab.com/username/project",
+  "project_name": "my-project",
+  "gitlab_token": "your_gitlab_token",
   "language": "chinese",
   "output_dir": "output",
   "max_file_size": 100000,
@@ -74,6 +89,17 @@ python run_api.py
   "local_dir": "/path/to/local/project",
   "project_name": "local-project",
   "language": "english"
+}
+```
+
+请求体示例（显式指定仓库类型）：
+```json
+{
+  "repo_url": "https://custom-gitlab.example.com/user/repo",
+  "repo_type": "gitlab",
+  "gitlab_token": "your_gitlab_token",
+  "project_name": "my-project",
+  "language": "chinese"
 }
 ```
 
@@ -127,10 +153,12 @@ python run_api.py
 
 | 参数 | 类型 | 必填 | 默认值 | 说明 |
 |------|------|------|--------|------|
-| repo_url | string | 否 | - | GitHub仓库URL |
+| repo_url | string | 否 | - | GitHub或GitLab仓库URL |
 | local_dir | string | 否 | - | 本地目录路径 |
 | project_name | string | 否 | - | 项目名称 |
 | github_token | string | 否 | - | GitHub访问令牌 |
+| gitlab_token | string | 否 | - | GitLab访问令牌 |
+| repo_type | string | 否 | - | 显式指定仓库类型（github或gitlab）。如果不提供，将从URL自动检测 |
 | output_dir | string | 否 | "output" | 输出目录 |
 | include_patterns | array | 否 | 默认包含模式 | 包含的文件模式 |
 | exclude_patterns | array | 否 | 默认排除模式 | 排除的文件模式 |
@@ -138,6 +166,23 @@ python run_api.py
 | language | string | 否 | "english" | 生成语言 |
 | use_cache | boolean | 否 | true | 是否使用缓存 |
 | max_abstractions | integer | 否 | 10 | 最大抽象概念数量 |
+
+## 仓库类型说明
+
+系统支持两种方式确定仓库类型：
+
+1. **自动检测**（默认）：通过URL中的域名判断
+   - 包含 `gitlab.com` 或 `gitlab.` 的URL会被识别为GitLab仓库
+   - 其他URL会被识别为GitHub仓库
+
+2. **显式指定**：使用 `repo_type` 参数
+   - 值为 `github` 或 `gitlab`
+   - 优先级高于自动检测
+   - 适用于私有GitLab实例或自定义域名的GitLab仓库
+
+### 使用场景示例：
+- 私有GitLab实例：`https://gitlab.example.com/user/repo` + `repo_type: "gitlab"`
+- 自定义域名GitHub：`https://code.example.com/user/repo` + `repo_type: "github"`
 
 ## 默认文件模式
 
@@ -153,6 +198,22 @@ python run_api.py
 - 版本控制: `.git/*`, `.github/*`
 
 ## 使用示例
+
+### 命令行使用
+
+```bash
+# 自动检测仓库类型（默认行为）
+python main.py --repo https://github.com/username/repo
+
+# 显式指定GitHub仓库类型
+python main.py --repo https://custom-domain.com/user/repo --repo-type github
+
+# 显式指定GitLab仓库类型（适用于私有GitLab实例）
+python main.py --repo https://gitlab.example.com/user/repo --repo-type gitlab --gitlab-token your_token
+
+# 使用本地目录
+python main.py --dir /path/to/local/project
+```
 
 ### 使用curl测试API
 
@@ -210,7 +271,7 @@ if status["status"] == "completed":
 
 ## 注意事项
 
-1. 确保设置了必要的环境变量（如GITHUB_TOKEN）
+1. 确保设置了必要的环境变量（如GITHUB_TOKEN、GITLAB_TOKEN）
 2. 对于大型仓库，生成过程可能需要较长时间
 3. API使用异步处理，返回的是任务ID而非即时结果
 4. 生成的文件会保存在指定的输出目录中

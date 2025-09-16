@@ -43,10 +43,12 @@ DEFAULT_EXCLUDE_PATTERNS = {
 
 # Pydantic models for request/response
 class TutorialRequest(BaseModel):
-    repo_url: Optional[str] = Field(None, description="URL of the public GitHub repository")
+    repo_url: Optional[str] = Field(None, description="URL of the public GitHub or GitLab repository")
     local_dir: Optional[str] = Field(None, description="Path to local directory")
     project_name: Optional[str] = Field(None, description="Project name")
     github_token: Optional[str] = Field(None, description="GitHub personal access token")
+    gitlab_token: Optional[str] = Field(None, description="GitLab personal access token")
+    repo_type: Optional[str] = Field(None, description="Explicit repository type (github or gitlab). If not provided, will auto-detect from URL.")
     output_dir: str = Field("output", description="Base directory for output")
     include_patterns: Optional[List[str]] = Field(None, description="Include file patterns")
     exclude_patterns: Optional[List[str]] = Field(None, description="Exclude file patterns")
@@ -78,11 +80,23 @@ def run_tutorial_generation(job_id: str, request: TutorialRequest):
         jobs[job_id]["status"] = "running"
         
         # Convert request to shared dictionary format
+        repo_type = None
+        if request.repo_url:
+            # Determine repository type: use explicit parameter if provided, otherwise auto-detect
+            if request.repo_type:
+                repo_type = request.repo_type
+            else:
+                # Auto-detect from URL (backward compatibility)
+                is_gitlab = "gitlab.com" in request.repo_url or "gitlab." in request.repo_url
+                repo_type = "gitlab" if is_gitlab else "github"
+        
         shared = {
             "repo_url": request.repo_url,
             "local_dir": request.local_dir,
             "project_name": request.project_name,
             "github_token": request.github_token,
+            "gitlab_token": request.gitlab_token,
+            "repo_type": repo_type,  # Add repository type information
             "output_dir": request.output_dir,
             "include_patterns": set(request.include_patterns) if request.include_patterns else DEFAULT_INCLUDE_PATTERNS,
             "exclude_patterns": set(request.exclude_patterns) if request.exclude_patterns else DEFAULT_EXCLUDE_PATTERNS,

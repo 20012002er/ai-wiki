@@ -39,7 +39,7 @@ def test_generate_tutorial():
     
     # 测试数据 - 使用一个小的本地目录或公开的GitHub仓库
     test_data = {
-        "repo_url": "https://github.com/octocat/Hello-World",  # GitHub示例仓库
+        "repo_url": "https://github.com/yankils/hello-world",  # GitHub示例仓库
         "project_name": "hello-world-test",
         "language": "english",
         "output_dir": "test_output",

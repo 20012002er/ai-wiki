@@ -46,6 +46,7 @@ def main():
 
     parser.add_argument("-n", "--name", help="Project name (optional, derived from repo/directory if omitted).")
     parser.add_argument("-t", "--token", help="GitHub personal access token (optional, reads from GITHUB_TOKEN env var if not provided).")
+    parser.add_argument("--gitlab-token", help="GitLab personal access token (optional, reads from GITLAB_TOKEN env var if not provided).")
     parser.add_argument("-o", "--output", default="output", help="Base directory for output (default: ./output).")
     parser.add_argument("-i", "--include", nargs="+", help="Include file patterns (e.g. '*.py' '*.js'). Defaults to common code files if not specified.")
     parser.add_argument("-e", "--exclude", nargs="+", help="Exclude file patterns (e.g. 'tests/*' 'docs/*'). Defaults to test/build directories if not specified.")
@@ -56,15 +57,33 @@ def main():
     parser.add_argument("--no-cache", action="store_true", help="Disable LLM response caching (default: caching enabled)")
     # Add max_abstraction_num parameter to control the number of abstractions
     parser.add_argument("--max-abstractions", type=int, default=10, help="Maximum number of abstractions to identify (default: 10)")
+    # Add repository type parameter to explicitly specify GitHub or GitLab
+    parser.add_argument("--repo-type", choices=["github", "gitlab"], help="Explicitly specify repository type (github or gitlab). If not provided, will auto-detect from URL.")
 
     args = parser.parse_args()
 
-    # Get GitHub token from argument or environment variable if using repo
+    # Get GitHub and GitLab tokens from arguments or environment variables
     github_token = None
+    gitlab_token = None
+    repo_type = None
     if args.repo:
-        github_token = args.token or os.environ.get('GITHUB_TOKEN')
-        if not github_token:
-            print("Warning: No GitHub token provided. You might hit rate limits for public repositories.")
+        # Determine repository type: use explicit parameter if provided, otherwise auto-detect
+        if args.repo_type:
+            repo_type = args.repo_type
+            is_gitlab = (repo_type == "gitlab")
+        else:
+            # Auto-detect from URL (backward compatibility)
+            is_gitlab = "gitlab.com" in args.repo or "gitlab." in args.repo
+            repo_type = "gitlab" if is_gitlab else "github"
+        
+        if is_gitlab:
+            gitlab_token = args.gitlab_token or os.environ.get('GITLAB_TOKEN')
+            if not gitlab_token:
+                print("Warning: No GitLab token provided. Private repositories may not be accessible.")
+        else:
+            github_token = args.token or os.environ.get('GITHUB_TOKEN')
+            if not github_token:
+                print("Warning: No GitHub token provided. You might hit rate limits for public repositories.")
 
     # Initialize the shared dictionary with inputs
     shared = {
@@ -72,6 +91,8 @@ def main():
         "local_dir": args.dir,
         "project_name": args.name, # Can be None, FetchRepo will derive it
         "github_token": github_token,
+        "gitlab_token": gitlab_token,
+        "repo_type": repo_type,  # Add repository type information
         "output_dir": args.output, # Base directory for CombineTutorial output
 
         # Add include/exclude patterns and max file size
