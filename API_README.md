@@ -33,6 +33,20 @@ python api_server.py
 ```bash
 export API_HOST=0.0.0.0
 export API_PORT=8000
+export OLLAMA_HOST=http://127.0.0.1:11434
+export OLLAMA_MODEL=qwen3:8b
+python run_api.py
+```
+
+### 方式四：使用.env文件配置
+创建 `.env` 文件：
+```bash
+cp .env.example .env
+# 编辑 .env 文件配置您的设置
+```
+
+然后运行：
+```bash
 python run_api.py
 ```
 
@@ -201,3 +215,8 @@ if status["status"] == "completed":
 3. API使用异步处理，返回的是任务ID而非即时结果
 4. 生成的文件会保存在指定的输出目录中
 5. 建议在生产环境中使用进程管理器（如systemd, supervisord）来管理服务
+6. Ollama配置：
+   - 默认使用 `qwen3:8b` 模型
+   - 可通过 `OLLAMA_MODEL` 环境变量指定其他模型
+   - 可通过 `OLLAMA_HOST` 环境变量指定Ollama服务地址
+   - 确保Ollama服务已启动并运行在指定地址

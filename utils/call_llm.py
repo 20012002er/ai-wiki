@@ -2,6 +2,7 @@ from google import genai
 import os
 import logging
 import json
+import re
 from datetime import datetime
 import ollama
 
@@ -42,7 +43,7 @@ def call_llm(prompt, use_cache: bool = True):
             host = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
         )
         response = client.chat(
-            model='qwen3:8b',  # deepcoder:14b  gemma3:12b  phi4:14b Replace with your desired Ollama model name
+            model=os.getenv("OLLAMA_MODEL", "qwen3:8b"),  # deepcoder:14b  gemma3:12b  phi4:14b Replace with your desired Ollama model name
             messages=[
                 {
                     'role': 'user',
@@ -55,7 +56,15 @@ def call_llm(prompt, use_cache: bool = True):
             }
 
         )
-        return response['message']['content']
+        content = response['message']['content']
+        
+        # Remove <think></think> tags and their content
+        cleaned_content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL)
+        
+        # Remove any remaining whitespace and trim
+        cleaned_content = cleaned_content.strip()
+        
+        return cleaned_content
     except ollama.ResponseError as e:
         print(f"Ollama Error: {e}")
         return None  # Or handle the error as needed.
@@ -261,10 +270,56 @@ def call_llm(prompt, use_cache: bool = True):
 
 #     return response_text
 
+def test_think_tag_removal():
+    """Test function to verify <think> tag removal works correctly"""
+    test_cases = [
+        {
+            "input": "Hello<think>This is some thinking content</think> world!",
+            "expected": "Hello world!"
+        },
+        {
+            "input": "<think>Thinking here</think>Start of response",
+            "expected": "Start of response"
+        },
+        {
+            "input": "End of response<think>More thinking</think>",
+            "expected": "End of response"
+        },
+        {
+            "input": "Normal response without think tags",
+            "expected": "Normal response without think tags"
+        },
+        {
+            "input": "<think>Only thinking</think>",
+            "expected": ""
+        },
+        {
+            "input": "Multiple<think>first</think> tags<think>second</think>test",
+            "expected": "Multiple tags test"
+        }
+    ]
+    
+    print("Testing <think> tag removal functionality...")
+    for i, test_case in enumerate(test_cases, 1):
+        result = re.sub(r'<think>.*?</think>', '', test_case["input"], flags=re.DOTALL).strip()
+        status = "✓ PASS" if result == test_case["expected"] else "✗ FAIL"
+        print(f"Test {i}: {status}")
+        print(f"  Input:    {repr(test_case['input'])}")
+        print(f"  Expected: {repr(test_case['expected'])}")
+        print(f"  Got:      {repr(result)}")
+        if result != test_case["expected"]:
+            print("  ERROR: Test failed!")
+        print()
+
+
 if __name__ == "__main__":
+    # Run the think tag removal tests
+    test_think_tag_removal()
+    
+    print("\n" + "="*50)
     test_prompt = "Hello, how are you?"
 
     # First call - should hit the API
-    print("Making call...")
+    print("Making API call...")
     response1 = call_llm(test_prompt, use_cache=False)
     print(f"Response: {response1}")
