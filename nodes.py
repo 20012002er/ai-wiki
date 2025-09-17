@@ -41,7 +41,7 @@ class FetchRepo(Node):
 
         # Determine repository type
         is_gitlab = False
-        gitlab_domain = "gitlab.com"
+        gitlab_domain = os.environ.get("GITLAB_DOMAIN", "gitlab.com")
         repo_type = shared.get("repo_type")
         
         if repo_url:
@@ -56,7 +56,7 @@ class FetchRepo(Node):
             if is_gitlab:
                 from urllib.parse import urlparse
                 parsed_url = urlparse(repo_url)
-                if parsed_url.netloc and "gitlab" in parsed_url.netloc:
+                if parsed_url.netloc:
                     gitlab_domain = parsed_url.netloc
 
         return {
