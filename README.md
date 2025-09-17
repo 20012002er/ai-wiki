@@ -184,6 +184,39 @@ python run_api.py
 - 私有GitLab实例：`https://gitlab.example.com/user/repo` + `repo_type: "gitlab"`
 - 自定义域名GitHub：`https://code.example.com/user/repo` + `repo_type: "github"`
 
+### 自定义GitLab实例配置
+
+对于私有或自定义GitLab实例，需要设置以下环境变量：
+
+```bash
+# 设置自定义GitLab域名
+export GITLAB_DOMAIN=gitlab.example.com
+
+# 设置协议（http或https，默认为https）
+export GITLAB_PROTOCOL=https
+
+# 设置GitLab访问令牌
+export GITLAB_TOKEN=your_private_token_here
+```
+
+或者使用命令行参数：
+
+```bash
+python main.py --repo https://gitlab.example.com/user/repo \
+  --repo-type gitlab \
+  --gitlab-token your_token
+```
+
+**支持的URL格式：**
+- HTTP/HTTPS URL: `https://gitlab.example.com/user/project`
+- SSH URL: `git@gitlab.example.com:user/project.git` (会自动转换为HTTP格式使用API访问)
+
+**认证说明：**
+- 系统使用GitLab API进行访问，避免命令行认证提示
+- 需要提供有效的GitLab Personal Access Token
+- Token需要至少 `read_repository` 权限
+- SSH URL会自动转换为HTTP格式，使用API认证
+
 ## 默认文件模式
 
 ### 包含模式

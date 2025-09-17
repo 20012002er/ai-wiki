@@ -80,66 +80,36 @@ def crawl_gitlab_files(
     is_ssh_url = repo_url.startswith("git@") or repo_url.endswith(".git")
 
     if is_ssh_url:
-        # Clone repo via SSH to temp dir
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            print(f"Cloning SSH repo {repo_url} to temp dir {tmpdirname} ...")
-            try:
-                repo = git.Repo.clone_from(repo_url, tmpdirname)
-            except Exception as e:
-                print(f"Error cloning repo: {e}")
-                return {"files": {}, "stats": {"error": str(e)}}
-
-            # Attempt to checkout specific commit/branch if in URL
-            # Parse ref and subdir from SSH URL? SSH URLs don't have branch info embedded
-            # So rely on default branch, or user can checkout manually later
-            # Optionally, user can pass ref explicitly in future API
-
-            # Walk directory
-            files = {}
-            skipped_files = []
-
-            for root, dirs, filenames in os.walk(tmpdirname):
-                for filename in filenames:
-                    abs_path = os.path.join(root, filename)
-                    rel_path = os.path.relpath(abs_path, tmpdirname)
-
-                    # Check file size
-                    try:
-                        file_size = os.path.getsize(abs_path)
-                    except OSError:
-                        continue
-
-                    if file_size > max_file_size:
-                        skipped_files.append((rel_path, file_size))
-                        print(f"Skipping {rel_path}: size {file_size} exceeds limit {max_file_size}")
-                        continue
-
-                    # Check include/exclude patterns
-                    if not should_include_file(rel_path, filename):
-                        print(f"Skipping {rel_path}: does not match include/exclude patterns")
-                        continue
-
-                    # Read content
-                    try:
-                        with open(abs_path, "r", encoding="utf-8-sig") as f:
-                            content = f.read()
-                        files[rel_path] = content
-                        print(f"Added {rel_path} ({file_size} bytes)")
-                    except Exception as e:
-                        print(f"Failed to read {rel_path}: {e}")
-
-            return {
-                "files": files,
-                "stats": {
-                    "downloaded_count": len(files),
-                    "skipped_count": len(skipped_files),
-                    "skipped_files": skipped_files,
-                    "base_path": None,
-                    "include_patterns": include_patterns,
-                    "exclude_patterns": exclude_patterns,
-                    "source": "ssh_clone"
-                }
-            }
+        # Convert SSH URL to HTTP URL for API access instead of cloning
+        print(f"Converting SSH URL to HTTP format: {repo_url}")
+        
+        if repo_url.startswith("git@"):
+            # Convert git@gitlab.example.com:user/project.git to https://gitlab.example.com/user/project
+            ssh_parts = repo_url.split("@")[1].split(":")
+            if len(ssh_parts) == 2:
+                domain = ssh_parts[0]
+                path = ssh_parts[1].replace(".git", "")
+                repo_url = f"{gitlab_protocol}://{domain}/{path}"
+                print(f"Converted SSH URL to: {repo_url}")
+            else:
+                print(f"Warning: Unable to parse SSH URL: {repo_url}. Falling back to API detection.")
+        elif repo_url.endswith(".git"):
+            # Remove .git suffix for cleaner API usage
+            repo_url = repo_url[:-4]
+            print(f"Removed .git suffix: {repo_url}")
+        
+        # Re-parse the URL after conversion
+        parsed_url = urlparse(repo_url)
+        path_parts = parsed_url.path.strip('/').split('/')
+        
+        if len(path_parts) < 2:
+            raise ValueError(f"Invalid GitLab URL after SSH conversion: {repo_url}")
+        
+        # Extract the basic components - namespace and project
+        namespace = path_parts[0]
+        project = path_parts[1]
+        
+        print(f"Using API access instead of SSH cloning for better authentication support")
 
     # Parse GitLab URL to extract namespace, project, branch/commit, and path
     parsed_url = urlparse(repo_url)
@@ -252,10 +222,26 @@ def crawl_gitlab_files(
         if response.status_code == 404:
             if not token:
                 print(f"Error 404: Repository not found or is private.\n"
-                      f"If this is a private repository, please provide a valid GitLab token via the 'token' argument or set the GITLAB_TOKEN environment variable.")
+                      f"If this is a private repository, please provide a valid GitLab token via the 'token' argument or set the GITLAB_TOKEN environment variable.\n"
+                      f"For custom GitLab instances, also ensure GITLAB_DOMAIN and GITLAB_PROTOCOL environment variables are set correctly.")
             else:
                 print(f"Error 404: Path '{path}' not found in repository or insufficient permissions with the provided token.\n"
-                      f"Please verify the token has access to this repository and the path exists.")
+                      f"Please verify:\n"
+                      f"1. The token has access to this repository\n"
+                      f"2. The path exists in the repository\n"
+                      f"3. For custom GitLab instances: GITLAB_DOMAIN and GITLAB_PROTOCOL are set correctly")
+            return
+            
+        if response.status_code == 401:
+            print(f"Error 401: Authentication failed.\n"
+                  f"Please verify your GitLab token is valid and has appropriate permissions.\n"
+                  f"For custom GitLab instances, ensure GITLAB_DOMAIN and GITLAB_PROTOCOL are set correctly.")
+            return
+            
+        if response.status_code == 403:
+            print(f"Error 403: Access forbidden.\n"
+                  f"Your token may not have sufficient permissions for this repository.\n"
+                  f"Please verify the token has at least 'read_repository' scope.")
             return
             
         if response.status_code != 200:
@@ -307,7 +293,14 @@ def crawl_gitlab_files(
                         print(f"Skipping {rel_path}: Binary file or encoding issue")
                         continue
                 else:
-                    print(f"Failed to download {rel_path}: {file_response.status_code}")
+                    if file_response.status_code == 401:
+                        print(f"Failed to download {rel_path}: Authentication failed (401). Please verify your GitLab token.")
+                    elif file_response.status_code == 403:
+                        print(f"Failed to download {rel_path}: Access forbidden (403). Token may lack sufficient permissions.")
+                    elif file_response.status_code == 404:
+                        print(f"Failed to download {rel_path}: File not found (404).")
+                    else:
+                        print(f"Failed to download {rel_path}: {file_response.status_code}")
             
             elif item_type == "tree":  # Directory
                 # Check if directory should be excluded before recursing
