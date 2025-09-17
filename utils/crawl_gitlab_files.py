@@ -9,9 +9,10 @@ from typing import Union, Set, List, Dict, Tuple, Any
 from urllib.parse import urlparse
 
 def crawl_gitlab_files(
-    repo_url, 
-    token=None, 
-    gitlab_domain="gitlab.com",  # 可配置的 GitLab 域名
+    repo_url,
+    token=None,
+    gitlab_domain=None,  # 可配置的 GitLab 域名
+    gitlab_protocol=None,  # 可配置的 GitLab 协议
     max_file_size: int = 1 * 1024 * 1024,  # 1 MB
     use_relative_paths: bool = False,
     include_patterns: Union[str, Set[str]] = None,
@@ -27,7 +28,8 @@ def crawl_gitlab_files(
             - **Required for private repositories.**
             - **Recommended for private repos to avoid access issues.**
             - Can be passed explicitly or set via the `GITLAB_TOKEN` environment variable.
-        gitlab_domain (str, optional): GitLab instance domain (default: "gitlab.com")
+        gitlab_domain (str, optional): GitLab instance domain. If None, uses GITLAB_DOMAIN environment variable or defaults to "gitlab.com"
+        gitlab_protocol (str, optional): GitLab instance protocol ("http" or "https"). If None, uses GITLAB_PROTOCOL environment variable or defaults to "https"
         max_file_size (int, optional): Maximum file size in bytes to download (default: 1 MB)
         use_relative_paths (bool, optional): If True, file paths will be relative to the specified subdirectory
         include_patterns (str or set of str, optional): Pattern or set of patterns specifying which files to include (e.g., "*.py", {"*.md", "*.txt"}).
@@ -43,6 +45,19 @@ def crawl_gitlab_files(
         include_patterns = {include_patterns}
     if exclude_patterns and isinstance(exclude_patterns, str):
         exclude_patterns = {exclude_patterns}
+
+    # Get GitLab configuration from environment variables with fallbacks
+    if gitlab_domain is None:
+        gitlab_domain = os.environ.get("GITLAB_DOMAIN", "gitlab.com")
+    if gitlab_protocol is None:
+        gitlab_protocol = os.environ.get("GITLAB_PROTOCOL", "https")
+    
+    # Validate protocol
+    if gitlab_protocol not in ("http", "https"):
+        gitlab_protocol = "https"  # Default to HTTPS if invalid
+    
+    # Construct base URL for API calls
+    gitlab_base_url = f"{gitlab_protocol}://{gitlab_domain}"
 
     def should_include_file(file_path: str, file_name: str) -> bool:
         """Determine if a file should be included based on patterns"""
@@ -145,7 +160,7 @@ def crawl_gitlab_files(
     def fetch_branches(namespace: str, project: str):
         """Get branches of the repository"""
 
-        url = f"https://{gitlab_domain}/api/v4/projects/{namespace}%2F{project}/repository/branches"
+        url = f"{gitlab_base_url}/api/v4/projects/{namespace}%2F{project}/repository/branches"
         response = requests.get(url, headers=headers, timeout=(30, 30))
 
         if response.status_code == 404:
@@ -166,7 +181,7 @@ def crawl_gitlab_files(
     def check_commit(namespace: str, project: str, commit_sha: str):
         """Check if a commit exists in the repository"""
 
-        url = f"https://{gitlab_domain}/api/v4/projects/{namespace}%2F{project}/repository/commits/{commit_sha}"
+        url = f"{gitlab_base_url}/api/v4/projects/{namespace}%2F{project}/repository/commits/{commit_sha}"
         response = requests.get(url, headers=headers, timeout=(30, 30))
 
         return True if response.status_code == 200 else False
@@ -222,7 +237,7 @@ def crawl_gitlab_files(
         """Fetch contents of the repository at a specific path and ref"""
         # URL encode the path for GitLab API
         encoded_path = requests.utils.quote(path, safe='') if path else ""
-        url = f"https://{gitlab_domain}/api/v4/projects/{namespace}%2F{project}/repository/tree"
+        url = f"{gitlab_base_url}/api/v4/projects/{namespace}%2F{project}/repository/tree"
         params = {"path": encoded_path, "recursive": True, "ref": ref} if ref else {"path": encoded_path, "recursive": True}
         
         response = requests.get(url, headers=headers, params=params, timeout=(30, 30))
@@ -270,7 +285,7 @@ def crawl_gitlab_files(
                     continue
                 
                 # Get file content using GitLab API
-                file_url = f"https://{gitlab_domain}/api/v4/projects/{namespace}%2F{project}/repository/files/{requests.utils.quote(item_path, safe='')}/raw"
+                file_url = f"{gitlab_base_url}/api/v4/projects/{namespace}%2F{project}/repository/files/{requests.utils.quote(item_path, safe='')}/raw"
                 file_params = {"ref": ref} if ref else {}
                 
                 file_response = requests.get(file_url, headers=headers, params=file_params, timeout=(30, 30))
@@ -317,7 +332,8 @@ def crawl_gitlab_files(
             "base_path": specific_path if use_relative_paths else None,
             "include_patterns": include_patterns,
             "exclude_patterns": exclude_patterns,
-            "gitlab_domain": gitlab_domain
+            "gitlab_domain": gitlab_domain,
+            "gitlab_protocol": gitlab_protocol
         }
     }
 
@@ -338,6 +354,7 @@ if __name__ == "__main__":
         repo_url, 
         token=gitlab_token,
         gitlab_domain="your-gitlab-domain.com",  # 自定义 GitLab 域名
+        gitlab_protocol="https",  # 自定义 GitLab 协议
         max_file_size=1 * 1024 * 1024,  # 1 MB in bytes
         use_relative_paths=True,  # Enable relative paths
         include_patterns={"*.py", "*.md"},  # Include Python and Markdown files
@@ -351,6 +368,7 @@ if __name__ == "__main__":
         print(f"Skipped {stats['skipped_count']} files due to size limits or patterns.")
         print(f"Base path for relative paths: {stats['base_path']}")
         print(f"GitLab domain: {stats['gitlab_domain']}")
+        print(f"GitLab protocol: {stats['gitlab_protocol']}")
         print(f"Include patterns: {stats['include_patterns']}")
         print(f"Exclude patterns: {stats['exclude_patterns']}")
         
