@@ -3,7 +3,8 @@ import uuid
 import json
 from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, HTTPException, BackgroundTasks
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import dotenv
 
@@ -72,7 +73,12 @@ class JobStatus(BaseModel):
 
 # Global variables for job tracking
 jobs: Dict[str, Dict[str, Any]] = {}
-app = FastAPI(title="Tutorial Generation API", description="API for generating codebase tutorials")
+app = FastAPI(
+    title="Tutorial Generation API",
+    description="API for generating codebase tutorials",
+    docs_url=None,  # Disable default docs to use custom implementation
+    redoc_url=None  # Disable default redoc to use custom implementation
+)
 
 def run_tutorial_generation(job_id: str, request: TutorialRequest):
     """Background task to run tutorial generation"""
@@ -212,6 +218,117 @@ async def download_tutorial(job_id: str):
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "tutorial-generation-api"}
+
+# 挂载静态文件目录
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/docs", response_class=HTMLResponse)
+async def custom_docs():
+    """自定义Swagger UI文档页面（离线可用）"""
+    try:
+        with open("static/docs/index.html", "r", encoding="utf-8") as f:
+            html_content = f.read()
+        return HTMLResponse(content=html_content)
+    except FileNotFoundError:
+        return HTMLResponse(content="<h1>API Documentation</h1><p>Swagger UI resources not found. Please check static file setup.</p>")
+
+@app.get("/redoc", response_class=HTMLResponse)
+async def custom_redoc():
+    """自定义ReDoc文档页面（离线可用）"""
+    redoc_html = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Tutorial Generation API - Documentation</title>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                margin: 0;
+                padding: 20px;
+                background: #f5f5f5;
+            }
+            .container {
+                max-width: 1200px;
+                margin: 0 auto;
+                background: white;
+                padding: 20px;
+                border-radius: 8px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            }
+            h1 {
+                color: #333;
+                border-bottom: 2px solid #4990e2;
+                padding-bottom: 10px;
+            }
+            .endpoint {
+                margin: 20px 0;
+                padding: 15px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                background: #fafafa;
+            }
+            .method {
+                display: inline-block;
+                padding: 4px 8px;
+                background: #4990e2;
+                color: white;
+                border-radius: 3px;
+                font-weight: bold;
+                margin-right: 10px;
+            }
+            .path {
+                font-family: monospace;
+                font-size: 16px;
+            }
+            .description {
+                margin-top: 10px;
+                color: #666;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Tutorial Generation API Documentation</h1>
+            <p>This is an offline-friendly API documentation page.</p>
+            
+            <div class="endpoint">
+                <span class="method">POST</span>
+                <span class="path">/generate-tutorial</span>
+                <div class="description">Start a tutorial generation job</div>
+            </div>
+            
+            <div class="endpoint">
+                <span class="method">GET</span>
+                <span class="path">/job/{job_id}</span>
+                <div class="description">Get the status of a tutorial generation job</div>
+            </div>
+            
+            <div class="endpoint">
+                <span class="method">GET</span>
+                <span class="path">/download/{job_id}</span>
+                <div class="description">Download the generated tutorial files</div>
+            </div>
+            
+            <div class="endpoint">
+                <span class="method">GET</span>
+                <span class="path">/health</span>
+                <div class="description">Health check endpoint</div>
+            </div>
+            
+            <div class="endpoint">
+                <span class="method">GET</span>
+                <span class="path">/openapi.json</span>
+                <div class="description">OpenAPI specification</div>
+            </div>
+            
+            <p>For interactive documentation, visit <a href="/docs">/docs</a></p>
+        </div>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=redoc_html)
 
 if __name__ == "__main__":
     import uvicorn
