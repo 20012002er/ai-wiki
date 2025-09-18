@@ -209,7 +209,7 @@ def crawl_gitlab_files(
     ref = None
     specific_path = ""
     
-    if len(path_parts) > 2 and 'tree' == path_parts[2]:
+    if len(path_parts) > 3 and 'tree' == path_parts[3]:
         join_parts = lambda i: '/'.join(path_parts[i:])
 
         branches = fetch_branches(namespace, project)
@@ -240,7 +240,9 @@ def crawl_gitlab_files(
             return {"files": {}, "stats": {"error": "Invalid branch or commit reference"}}
 
         # Combine all parts after the ref as the path
-        part_index = 5 if '/' in ref else 4
+        # Path format: namespace/project/-/tree/ref/path
+        # So we start from index 5 (after ref)
+        part_index = 5
         specific_path = join_parts(part_index) if part_index < len(path_parts) else ""
     else:
         # Don't put the ref param to query
