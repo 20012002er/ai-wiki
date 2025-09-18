@@ -17,7 +17,8 @@ def crawl_gitlab_files(
     use_relative_paths: bool = False,
     include_patterns: Union[str, Set[str]] = None,
     exclude_patterns: Union[str, Set[str]] = None,
-    debug: bool = False
+    debug: bool = False,
+    ref: str = None  # 用户指定的分支或commit引用
 ):
     """
     Crawl files from a specific path in a GitLab repository at a specific commit.
@@ -38,6 +39,7 @@ def crawl_gitlab_files(
         exclude_patterns (str or set of str, optional): Pattern or set of patterns specifying which files to exclude.
                                                        If None, no files are excluded.
         debug (bool, optional): Enable debug mode for detailed logging. Useful for troubleshooting 400 errors.
+        ref (str, optional): Specific branch, tag, or commit reference to use. If provided, will override any ref parsed from URL.
 
     Returns:
         dict: Dictionary with files and statistics
@@ -205,50 +207,63 @@ def crawl_gitlab_files(
             
         return True if response.status_code == 200 else False
 
-    # Check if URL contains a specific branch/commit
-    ref = None
+    # Check if user provided a specific ref, otherwise parse from URL
     specific_path = ""
     
-    if len(path_parts) > 3 and 'tree' == path_parts[3]:
-        join_parts = lambda i: '/'.join(path_parts[i:])
-
-        branches = fetch_branches(namespace, project)
-        branch_names = [branch.get("name") for branch in branches]
-
-        # Fetching branches is not successful
-        if len(branches) == 0:
-            return {"files": {}, "stats": {"error": "Failed to fetch branches"}}
-
-        # To check branch name
-        relevant_path = join_parts(4)
-
-        # Find a match with relevant path and get the branch name
-        ref = next((name for name in branch_names if relevant_path.startswith(name)), None)
-
-        # If match is not found, check if it's a commit SHA
-        if ref is None:
-            # Check if the next part looks like a commit SHA (40 char hex)
-            potential_commit = path_parts[3]
-            if len(potential_commit) == 40 and all(c in '0123456789abcdef' for c in potential_commit.lower()):
-                if check_commit(namespace, project, potential_commit):
-                    ref = potential_commit
-
-        # If it is neither a branch nor a commit
-        if ref is None:
-            print(f"The given path does not match with any branch or commit in the repository.\n"
-                  f"Please verify the path exists.")
-            return {"files": {}, "stats": {"error": "Invalid branch or commit reference"}}
-
-        # Combine all parts after the ref as the path
-        # Path format: namespace/project/-/tree/ref/path
-        # So we start from index 5 (after ref)
-        part_index = 5
-        specific_path = join_parts(part_index) if part_index < len(path_parts) else ""
+    # If user provided a ref, use it directly
+    if ref:
+        if debug:
+            print(f"DEBUG: Using user-provided ref: {ref}")
+        
+        # Check if URL contains a specific path after the ref
+        if len(path_parts) > 3 and 'tree' == path_parts[3]:
+            join_parts = lambda i: '/'.join(path_parts[i:])
+            # Path format: namespace/project/-/tree/ref/path
+            # So we start from index 5 (after ref)
+            part_index = 5
+            specific_path = join_parts(part_index) if part_index < len(path_parts) else ""
     else:
-        # Don't put the ref param to query
-        # and let GitLab decide default branch
-        ref = None
-        specific_path = ""
+        # Fallback to original URL parsing logic if no ref provided
+        if len(path_parts) > 3 and 'tree' == path_parts[3]:
+            join_parts = lambda i: '/'.join(path_parts[i:])
+
+            branches = fetch_branches(namespace, project)
+            branch_names = [branch.get("name") for branch in branches]
+
+            # Fetching branches is not successful
+            if len(branches) == 0:
+                return {"files": {}, "stats": {"error": "Failed to fetch branches"}}
+
+            # To check branch name
+            relevant_path = join_parts(4)
+
+            # Find a match with relevant path and get the branch name
+            ref = next((name for name in branch_names if relevant_path.startswith(name)), None)
+
+            # If match is not found, check if it's a commit SHA
+            if ref is None:
+                # Check if the next part looks like a commit SHA (40 char hex)
+                potential_commit = path_parts[3]
+                if len(potential_commit) == 40 and all(c in '0123456789abcdef' for c in potential_commit.lower()):
+                    if check_commit(namespace, project, potential_commit):
+                        ref = potential_commit
+
+            # If it is neither a branch nor a commit
+            if ref is None:
+                print(f"The given path does not match with any branch or commit in the repository.\n"
+                      f"Please verify the path exists.")
+                return {"files": {}, "stats": {"error": "Invalid branch or commit reference"}}
+
+            # Combine all parts after the ref as the path
+            # Path format: namespace/project/-/tree/ref/path
+            # So we start from index 5 (after ref)
+            part_index = 5
+            specific_path = join_parts(part_index) if part_index < len(path_parts) else ""
+        else:
+            # Don't put the ref param to query
+            # and let GitLab decide default branch
+            ref = None
+            specific_path = ""
     
     # Dictionary to store path -> content mapping
     files = {}

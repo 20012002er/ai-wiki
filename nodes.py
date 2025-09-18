@@ -39,6 +39,7 @@ class FetchRepo(Node):
         exclude_patterns = shared["exclude_patterns"]
         max_file_size = shared["max_file_size"]
         debug = shared.get("debug", False)
+        ref = shared.get("ref")  # Get ref parameter if provided
 
         # Determine repository type
         is_gitlab = False
@@ -72,6 +73,7 @@ class FetchRepo(Node):
             "max_file_size": max_file_size,
             "use_relative_paths": True,
             "debug": debug,
+            "ref": ref,  # Pass ref parameter to GitLab crawler
         }
 
     def exec(self, prep_res):
@@ -89,6 +91,7 @@ class FetchRepo(Node):
                     max_file_size=prep_res["max_file_size"],
                     use_relative_paths=prep_res["use_relative_paths"],
                     debug=prep_res["debug"],
+                    ref=prep_res.get("ref"),  # Pass ref parameter
                 )
             else:
                 # Use GitHub crawler for GitHub repositories

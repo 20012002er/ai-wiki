@@ -15,7 +15,7 @@ def validate_ref_fix():
     print("=== 验证ref参数修复 ===")
     
     # 测试URL：包含具体文件的GitLab URL
-    test_url = "https://gitlab.com/gitlab-org/gitlab-test/-/tree/main/utils/crawl_local_files.py"
+    test_url = "http: //devgit.z-bank.com/api/v4/projects/devops-platform/ai-wiki/repository/files/run_api.py"
     
     print(f"测试URL: {test_url}")
     

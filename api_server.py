@@ -50,6 +50,7 @@ class TutorialRequest(BaseModel):
     github_token: Optional[str] = Field(None, description="GitHub personal access token")
     gitlab_token: Optional[str] = Field(None, description="GitLab personal access token")
     repo_type: Optional[str] = Field(None, description="Explicit repository type (github or gitlab). If not provided, will auto-detect from URL.")
+    ref: Optional[str] = Field(None, description="Specific branch, tag, or commit reference for GitLab repositories")
     output_dir: str = Field("output", description="Base directory for output")
     include_patterns: Optional[List[str]] = Field(None, description="Include file patterns")
     exclude_patterns: Optional[List[str]] = Field(None, description="Exclude file patterns")
@@ -103,6 +104,7 @@ def run_tutorial_generation(job_id: str, request: TutorialRequest):
             "github_token": request.github_token,
             "gitlab_token": request.gitlab_token,
             "repo_type": repo_type,  # Add repository type information
+            "ref": request.ref,  # Add ref parameter
             "output_dir": request.output_dir,
             "include_patterns": set(request.include_patterns) if request.include_patterns else DEFAULT_INCLUDE_PATTERNS,
             "exclude_patterns": set(request.exclude_patterns) if request.exclude_patterns else DEFAULT_EXCLUDE_PATTERNS,
