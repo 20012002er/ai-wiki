@@ -16,7 +16,8 @@ def crawl_gitlab_files(
     max_file_size: int = 1 * 1024 * 1024,  # 1 MB
     use_relative_paths: bool = False,
     include_patterns: Union[str, Set[str]] = None,
-    exclude_patterns: Union[str, Set[str]] = None
+    exclude_patterns: Union[str, Set[str]] = None,
+    debug: bool = False
 ):
     """
     Crawl files from a specific path in a GitLab repository at a specific commit.
@@ -36,6 +37,7 @@ def crawl_gitlab_files(
                                                        If None, all files are included.
         exclude_patterns (str or set of str, optional): Pattern or set of patterns specifying which files to exclude.
                                                        If None, no files are excluded.
+        debug (bool, optional): Enable debug mode for detailed logging. Useful for troubleshooting 400 errors.
 
     Returns:
         dict: Dictionary with files and statistics
@@ -64,6 +66,14 @@ def crawl_gitlab_files(
     
     # Construct base URL for API calls
     gitlab_base_url = f"{gitlab_protocol}://{gitlab_domain}"
+    
+    if debug:
+        print(f"DEBUG: GitLab base URL: {gitlab_base_url}")
+        print(f"DEBUG: Token provided: {'Yes' if token else 'No'}")
+        if token:
+            print(f"DEBUG: Token length: {len(token)} characters")
+        print(f"DEBUG: Repository URL: {repo_url}")
+        # Namespace and project will be parsed later, so we can't print them here yet
 
     def should_include_file(file_path: str, file_name: str) -> bool:
         """Determine if a file should be included based on patterns"""
@@ -128,16 +138,29 @@ def crawl_gitlab_files(
     namespace = path_parts[0]
     project = path_parts[1]
     
+    if debug:
+        print(f"DEBUG: Parsed namespace: {namespace}, project: {project}")
+    
     # Setup for GitLab API
     headers = {"Content-Type": "application/json"}
     if token:
         headers["PRIVATE-TOKEN"] = token
+        if debug:
+            print(f"DEBUG: Using PRIVATE-TOKEN header for authentication")
 
     def fetch_branches(namespace: str, project: str):
         """Get branches of the repository"""
 
-        url = f"{gitlab_base_url}/api/v4/projects/{namespace}%2F{project}/repository/branches"
+        # Properly encode project name for branches API
+        encoded_project = requests.utils.quote(project, safe='')
+        url = f"{gitlab_base_url}/api/v4/projects/{namespace}%2F{encoded_project}/repository/branches"
+        if debug:
+            print(f"DEBUG: Fetching branches from URL: {url}")
+            
         response = requests.get(url, headers=headers, timeout=(30, 30))
+        
+        if debug:
+            print(f"DEBUG: Branches response status: {response.status_code}")
 
         if response.status_code == 404:
             if not token:
@@ -148,8 +171,15 @@ def crawl_gitlab_files(
                       f"Please verify the repository exists and the token has access to this repository.")
             return []
             
-        if response.status_code != 200:
-            print(f"Error fetching the branches of {namespace}/{project}: {response.status_code} - {response.text}")
+        if response.status_code == 400:
+            print(f"Error 400: Bad Request when fetching branches of {namespace}/{project}.\n"
+                  f"This may indicate:\n"
+                  f"1. Invalid project path encoding\n"
+                  f"2. GitLab API compatibility issue\n"
+                  f"Response: {response.text[:200]}...")
+            return []
+        elif response.status_code != 200:
+            print(f"Error fetching the branches of {namespace}/{project}: {response.status_code} - {response.text[:200]}...")
             return []
 
         return response.json()
@@ -157,9 +187,22 @@ def crawl_gitlab_files(
     def check_commit(namespace: str, project: str, commit_sha: str):
         """Check if a commit exists in the repository"""
 
-        url = f"{gitlab_base_url}/api/v4/projects/{namespace}%2F{project}/repository/commits/{commit_sha}"
+        # Properly encode project name for commits API
+        encoded_project = requests.utils.quote(project, safe='')
+        url = f"{gitlab_base_url}/api/v4/projects/{namespace}%2F{encoded_project}/repository/commits/{commit_sha}"
+        if debug:
+            print(f"DEBUG: Checking commit at URL: {url}")
+            
         response = requests.get(url, headers=headers, timeout=(30, 30))
-
+        
+        if debug:
+            print(f"DEBUG: Commit check response status: {response.status_code}")
+        
+        if response.status_code == 400:
+            print(f"Error 400: Bad Request when checking commit {commit_sha}.\n"
+                  f"This may indicate invalid commit SHA format or encoding issue.")
+            return False
+            
         return True if response.status_code == 200 else False
 
     # Check if URL contains a specific branch/commit
@@ -211,12 +254,31 @@ def crawl_gitlab_files(
     
     def fetch_contents(path):
         """Fetch contents of the repository at a specific path and ref"""
-        # URL encode the path for GitLab API
+        # URL encode the path for GitLab API - GitLab requires proper encoding
+        # Use double URL encoding for special characters in paths
         encoded_path = requests.utils.quote(path, safe='') if path else ""
-        url = f"{gitlab_base_url}/api/v4/projects/{namespace}%2F{project}/repository/tree"
-        params = {"path": encoded_path, "recursive": True, "ref": ref} if ref else {"path": encoded_path, "recursive": True}
+        double_encoded_path = requests.utils.quote(encoded_path, safe='') if path else ""
         
+        # GitLab API expects proper encoding for project names with special characters
+        encoded_project = requests.utils.quote(project, safe='')
+        url = f"{gitlab_base_url}/api/v4/projects/{namespace}%2F{encoded_project}/repository/tree"
+        
+        # Build parameters carefully - GitLab can be sensitive to parameter format
+        params = {}
+        if path:
+            params["path"] = encoded_path  # GitLab expects single encoding for path parameter
+        params["recursive"] = True
+        if ref:
+            params["ref"] = ref
+            
+        if debug:
+            print(f"DEBUG: Fetching tree for path '{path}' with params: {params}")
+            print(f"DEBUG: Tree request URL: {url}")
+            
         response = requests.get(url, headers=headers, params=params, timeout=(30, 30))
+        
+        if debug:
+            print(f"DEBUG: Tree response status: {response.status_code}")
         
         if response.status_code == 429:  # Rate limiting
             reset_time = int(response.headers.get('RateLimit-Reset', 0))
@@ -250,8 +312,16 @@ def crawl_gitlab_files(
                   f"Please verify the token has at least 'read_repository' scope.")
             return
             
-        if response.status_code != 200:
-            print(f"Error fetching {path}: {response.status_code} - {response.text}")
+        if response.status_code == 400:
+            print(f"Error 400: Bad Request when fetching {path}.\n"
+                  f"This may indicate:\n"
+                  f"1. Invalid path encoding: {encoded_path}\n"
+                  f"2. Invalid ref parameter: {ref}\n"
+                  f"3. GitLab API compatibility issue\n"
+                  f"Response: {response.text[:200]}...")
+            return
+        elif response.status_code != 200:
+            print(f"Error fetching {path}: {response.status_code} - {response.text[:200]}...")
             return
         
         contents = response.json()
@@ -276,9 +346,19 @@ def crawl_gitlab_files(
                     print(f"Skipping {rel_path}: Does not match include/exclude patterns")
                     continue
                 
-                # Get file content using GitLab API
-                file_url = f"{gitlab_base_url}/api/v4/projects/{namespace}%2F{project}/repository/files/{requests.utils.quote(item_path, safe='')}/raw"
-                file_params = {"ref": ref} if ref else {}
+                # Get file content using GitLab API - ensure proper encoding
+                encoded_item_path = requests.utils.quote(item_path, safe='')
+                encoded_project = requests.utils.quote(project, safe='')
+                file_url = f"{gitlab_base_url}/api/v4/projects/{namespace}%2F{encoded_project}/repository/files/{encoded_item_path}/raw"
+                
+                file_params = {}
+                if ref:
+                    file_params["ref"] = ref
+                    
+                if debug:
+                    print(f"DEBUG: Downloading file: {item_path}")
+                    print(f"DEBUG: File URL: {file_url}")
+                    print(f"DEBUG: File params: {file_params}")
                 
                 file_response = requests.get(file_url, headers=headers, params=file_params, timeout=(30, 30))
                 
@@ -299,14 +379,20 @@ def crawl_gitlab_files(
                         print(f"Skipping {rel_path}: Binary file or encoding issue")
                         continue
                 else:
-                    if file_response.status_code == 401:
+                    if file_response.status_code == 400:
+                        print(f"Failed to download {rel_path}: Bad Request (400). This may indicate:\n"
+                              f"1. Invalid file path encoding\n"
+                              f"2. Invalid ref parameter\n"
+                              f"3. GitLab API compatibility issue\n"
+                              f"Response: {file_response.text[:200]}...")
+                    elif file_response.status_code == 401:
                         print(f"Failed to download {rel_path}: Authentication failed (401). Please verify your GitLab token.")
                     elif file_response.status_code == 403:
                         print(f"Failed to download {rel_path}: Access forbidden (403). Token may lack sufficient permissions.")
                     elif file_response.status_code == 404:
                         print(f"Failed to download {rel_path}: File not found (404).")
                     else:
-                        print(f"Failed to download {rel_path}: {file_response.status_code}")
+                        print(f"Failed to download {rel_path}: {file_response.status_code} - {file_response.text[:100]}...")
             
             elif item_type == "tree":  # Directory
                 # Check if directory should be excluded before recursing

@@ -59,6 +59,8 @@ def main():
     parser.add_argument("--max-abstractions", type=int, default=10, help="Maximum number of abstractions to identify (default: 10)")
     # Add repository type parameter to explicitly specify GitHub or GitLab
     parser.add_argument("--repo-type", choices=["github", "gitlab"], help="Explicitly specify repository type (github or gitlab). If not provided, will auto-detect from URL.")
+    # Add debug parameter for troubleshooting
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode for detailed logging, useful for troubleshooting API errors")
 
     args = parser.parse_args()
 
@@ -108,6 +110,9 @@ def main():
         
         # Add max_abstraction_num parameter
         "max_abstraction_num": args.max_abstractions,
+        
+        # Add debug flag
+        "debug": args.debug,
 
         # Outputs will be populated by the nodes
         "files": [],
@@ -121,6 +126,8 @@ def main():
     # Display starting message with repository/directory and language
     print(f"Starting tutorial generation for: {args.repo or args.dir} in {args.language.capitalize()} language")
     print(f"LLM caching: {'Disabled' if args.no_cache else 'Enabled'}")
+    if args.debug:
+        print(f"Debug mode: Enabled - detailed API logging will be shown")
 
     # Create the flow instance
     tutorial_flow = create_tutorial_flow()
