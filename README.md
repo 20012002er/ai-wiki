@@ -75,6 +75,7 @@ python run_api.py
   "repo_url": "https://gitlab.com/username/project",
   "project_name": "my-project",
   "gitlab_token": "your_gitlab_token",
+  "ref": "main",  # 可选：指定分支、标签或commit引用
   "language": "chinese",
   "output_dir": "output",
   "max_file_size": 100000,
@@ -159,6 +160,7 @@ python run_api.py
 | github_token | string | 否 | - | GitHub访问令牌 |
 | gitlab_token | string | 否 | - | GitLab访问令牌 |
 | repo_type | string | 否 | - | 显式指定仓库类型（github或gitlab）。如果不提供，将从URL自动检测 |
+| ref | string | 否 | - | GitLab仓库的分支、标签或commit引用。如果提供，将覆盖URL中解析的ref |
 | output_dir | string | 否 | "output" | 输出目录 |
 | include_patterns | array | 否 | 默认包含模式 | 包含的文件模式 |
 | exclude_patterns | array | 否 | 默认排除模式 | 排除的文件模式 |
@@ -204,7 +206,8 @@ export GITLAB_TOKEN=your_private_token_here
 ```bash
 python main.py --repo https://gitlab.example.com/user/repo \
   --repo-type gitlab \
-  --gitlab-token your_token
+  --gitlab-token your_token \
+  --ref main  # 可选：指定分支或commit引用
 ```
 
 **支持的URL格式：**
@@ -242,7 +245,7 @@ python main.py --repo https://github.com/username/repo
 python main.py --repo https://custom-domain.com/user/repo --repo-type github
 
 # 显式指定GitLab仓库类型（适用于私有GitLab实例）
-python main.py --repo https://gitlab.example.com/user/repo --repo-type gitlab --gitlab-token your_token
+python main.py --repo https://gitlab.example.com/user/repo --repo-type gitlab --gitlab-token your_token --ref develop
 
 # 使用本地目录
 python main.py --dir /path/to/local/project
@@ -270,6 +273,17 @@ curl "http://localhost:8000/job/a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 ```bash
 curl -o tutorial.zip "http://localhost:8000/download/a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 ```
+
+### Ref参数说明
+
+对于GitLab仓库，`ref` 参数用于指定要使用的分支、标签或commit引用：
+
+- **优先级**：用户指定的ref参数优先于URL中解析的ref
+- **使用场景**：
+  - 指定特定的分支：`--ref main` 或 `"ref": "main"`
+  - 指定标签：`--ref v1.0.0` 或 `"ref": "v1.0.0"`
+  - 指定commit SHA：`--ref abcdef123456` 或 `"ref": "abcdef123456"`
+- **向后兼容**：如果不提供ref参数，系统仍然会从URL中自动解析ref
 
 ### 使用Python客户端
 

@@ -59,6 +59,8 @@ def main():
     parser.add_argument("--max-abstractions", type=int, default=10, help="Maximum number of abstractions to identify (default: 10)")
     # Add repository type parameter to explicitly specify GitHub or GitLab
     parser.add_argument("--repo-type", choices=["github", "gitlab"], help="Explicitly specify repository type (github or gitlab). If not provided, will auto-detect from URL.")
+    # Add ref parameter for GitLab repositories
+    parser.add_argument("--ref", help="Specific branch, tag, or commit reference for GitLab repositories")
     # Add debug parameter for troubleshooting
     parser.add_argument("--debug", action="store_true", help="Enable debug mode for detailed logging, useful for troubleshooting API errors")
 
@@ -95,6 +97,7 @@ def main():
         "github_token": github_token,
         "gitlab_token": gitlab_token,
         "repo_type": repo_type,  # Add repository type information
+        "ref": args.ref,  # Add ref parameter for GitLab
         "output_dir": args.output, # Base directory for CombineTutorial output
 
         # Add include/exclude patterns and max file size
