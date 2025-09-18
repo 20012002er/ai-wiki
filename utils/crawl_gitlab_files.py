@@ -55,6 +55,12 @@ def crawl_gitlab_files(
     # Validate protocol
     if gitlab_protocol not in ("http", "https"):
         gitlab_protocol = "https"  # Default to HTTPS if invalid
+
+    if token is None:
+        token = os.environ.get("GITLAB_TOKEN")
+        if token is None:
+            print("Warning: No GitLab token provided. Private repositories may not be accessible.\n"
+                  "To access private repos, provide a token via the 'token' argument or set the GITLAB_TOKEN environment variable.")
     
     # Construct base URL for API calls
     gitlab_base_url = f"{gitlab_protocol}://{gitlab_domain}"
