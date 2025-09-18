@@ -220,7 +220,7 @@ def crawl_gitlab_files(
             return {"files": {}, "stats": {"error": "Failed to fetch branches"}}
 
         # To check branch name
-        relevant_path = join_parts(3)
+        relevant_path = join_parts(4)
 
         # Find a match with relevant path and get the branch name
         ref = next((name for name in branch_names if relevant_path.startswith(name)), None)
